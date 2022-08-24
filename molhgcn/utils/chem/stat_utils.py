@@ -22,6 +22,10 @@ def compute_acc(logits, labels, masks):
 def compute_auroc(logits, labels, masks=None, average='micro'):
     with torch.no_grad():
         pred = logits.sigmoid().round().cpu().numpy()
+        labels = labels.cpu().numpy()
+
+        if masks is not None:
+            masks = masks.cpu().numpy()
 
     if average == 'micro':
         try:
@@ -33,14 +37,20 @@ def compute_auroc(logits, labels, masks=None, average='micro'):
     if average == 'macro':  # performing masked AUROC marco.
         n_tasks = labels.shape[1]
         scores = []
-        try:
-            for task in range(n_tasks):
-                task_w = masks[:, task]
-                task_y_true = labels[:, task][task_w != 0].numpy()
-                task_y_pred = pred[:, task][task_w != 0]
-                scores.append(roc_auc_score(task_y_true, task_y_pred))
-        except:
-            pass
+
+        for task in range(n_tasks):
+            task_w = masks[:, task]
+            task_y_true = labels[:, task][task_w != 0]
+            task_y_pred = pred[:, task][task_w != 0]
+
+            if (task_y_true == 0).all() or (task_y_true == 1).all():
+                continue
+
+            scores.append(roc_auc_score(task_y_true, task_y_pred))
+
+        if len(scores) < n_tasks:
+            print(f'{len(scores)} of {n_tasks} tasks are missing.')
+
         auroc = np.average(scores)
 
     return auroc

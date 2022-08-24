@@ -4,65 +4,15 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 import torch
-from dgllife.utils import BaseAtomFeaturizer, BaseBondFeaturizer
-from dgllife.utils.featurizers import (atom_chiral_tag_one_hot,
-                                       atom_chirality_type_one_hot,
-                                       atom_degree_one_hot,
-                                       atom_explicit_valence_one_hot,
-                                       atom_formal_charge_one_hot,
-                                       atom_hybridization_one_hot,
-                                       atom_implicit_valence_one_hot,
-                                       atom_is_aromatic_one_hot,
-                                       atom_is_chiral_center,
-                                       atom_is_in_ring_one_hot,
-                                       atom_mass,
-                                       atom_num_radical_electrons_one_hot,
-                                       atom_total_num_H_one_hot,
-                                       atom_type_one_hot,
-                                       atomic_number,
-                                       bond_is_conjugated_one_hot,
-                                       bond_is_in_ring,
-                                       bond_type_one_hot)
+from dgllife.utils import PretrainAtomFeaturizer, PretrainBondFeaturizer
 from torch import tensor
 
-ATOM_FEATURIZER = BaseAtomFeaturizer({'atom_type': atom_type_one_hot,
-                                      'atomic_number': atomic_number,
-                                      'atom_mass': atom_mass,
-                                      'atom_degree': atom_degree_one_hot,
-                                      'atom_explicit': atom_explicit_valence_one_hot,
-                                      'atom_implicit': atom_implicit_valence_one_hot,
-                                      'atom_num_H': atom_total_num_H_one_hot,
-                                      'formal_charge': atom_formal_charge_one_hot,
-                                      'atom_hybridization': atom_hybridization_one_hot,
-                                      'radical_e': atom_num_radical_electrons_one_hot,
-                                      'aromatic': atom_is_aromatic_one_hot,
-                                      'atom_in_ring': atom_is_in_ring_one_hot,
-                                      'atom_chiral_tag': atom_chiral_tag_one_hot,
-                                      'atom_chirality': atom_chirality_type_one_hot,
-                                      'atom_chiral_center': atom_is_chiral_center})
+ATOM_FEATURIZER = PretrainAtomFeaturizer()
 
-BOND_FEATURIZER = BaseBondFeaturizer({'bond_type': bond_type_one_hot,
-                                      'in_ring': bond_is_in_ring,
-                                      'conj_bond': bond_is_conjugated_one_hot})
+BOND_FEATURIZER = PretrainBondFeaturizer(self_loop=False)
 
-NODE_ATTRS = ['atom_type',
-              'atomic_number',
-              'atom_mass',
-              'atom_degree',
-              'atom_explicit',
-              'atom_implicit',
-              'atom_num_H',
-              'formal_charge',
-              'atom_hybridization',
-              'radical_e',
-              'aromatic',
-              'atom_in_ring',
-              'atom_chiral_tag',
-              'atom_chirality',
-              'atom_chiral_center']
-EDGE_ATTRS = ['bond_type',
-              'in_ring',
-              'conj_bond']
+NODE_ATTRS = ['atomic_number', 'chirality_type']
+EDGE_ATTRS = ['bond_type', 'bond_direction_type']
 
 """
 Separate atoms into element groups, cyclics and non cyclics

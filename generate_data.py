@@ -8,6 +8,7 @@ from dgllife.utils import RandomSplitter
 from molhgcn.utils.data_generation.hypergraph_utils.func_group_helpers import ATOM_FEATURIZER, BOND_FEATURIZER
 from molhgcn.utils.data_generation.hypergraph_utils.graph_gen import smiles_to_hypergraph
 
+from MoleculeBench import filtered_and_canonicalized_dataset, train_val_test_split, dataset_info
 
 def get_regression_dataset(dataset: str,
                            mean_fg_init: bool,
@@ -52,8 +53,6 @@ def get_classification_dataset(dataset: str,
                                fully_connected_fg: bool,
                                n_jobs: int,
                                seed: int):
-    assert dataset in ['Tox21', 'ClinTox',
-                       'SIDER', 'BBBP', 'BACE']
 
     def get_task_pos_weights(labels, masks):
         num_pos = F.sum(labels, dim=0)
@@ -77,16 +76,25 @@ def get_classification_dataset(dataset: str,
                      use_cycle=use_cycle,
                      fully_connected_fg=fully_connected_fg)
 
-    data = getattr(dgldata, dataset)(s_2_hg,
-                                     ATOM_FEATURIZER,
-                                     BOND_FEATURIZER,
-                                     n_jobs=n_jobs)
+    info = dataset_info(dataset)
+    data = dgldata.MoleculeCSVDataset(filtered_and_canonicalized_dataset(dataset),
+                                      s_2_hg,
+                                      ATOM_FEATURIZER,
+                                      BOND_FEATURIZER,
+                                      info.smiles_column,
+                                      f'./dataset/{dataset}.bin',
+                                      task_names=info.task_columns,
+                                      load=True,
+                                      n_jobs=n_jobs)
 
-    train, val, test = RandomSplitter.train_val_test_split(dataset=data,
-                                                           random_state=seed)
+    train, val, test = train_val_test_split(dataset, data_list=data, random_state=seed)
 
     train_gs, train_ls, train_masks, train_tw = get_data(train)
     val_gs, val_ls, val_masks, val_tw = get_data(val)
     test_gs, test_ls, test_masks, test_tw = get_data(test)
 
-    return (train_gs, train_ls, train_masks, train_tw), (val_gs, val_ls, val_masks), (test_gs, test_ls, test_masks)
+    train_info = { 'y': train_ls, 'm': train_masks, 'w': train_tw }
+    val_info = { 'y': val_ls, 'm': val_masks }
+    test_info = { 'y': test_ls, 'm': test_masks }
+
+    return (train_gs, train_info), (val_gs, val_info), (test_gs, test_info)

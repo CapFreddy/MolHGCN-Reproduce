@@ -8,11 +8,11 @@ from dgllife.utils import mol_to_bigraph
 from dgllife.utils import smiles_to_bigraph
 from rdkit import Chem
 
-from molhgcn.utils.hypergraph_utils.func_group_helpers import (ATOM_FEATURIZER,
-                                                               BOND_FEATURIZER,
-                                                               NODE_ATTRS,
-                                                               EDGE_ATTRS,
-                                                               get_graph)
+from molhgcn.utils.data_generation.hypergraph_utils.func_group_helpers import (ATOM_FEATURIZER,
+                                                                               BOND_FEATURIZER,
+                                                                               NODE_ATTRS,
+                                                                               EDGE_ATTRS,
+                                                                               get_graph)
 
 
 def get_task_pos_weights(labels, masks):
@@ -80,7 +80,7 @@ def get_complete_graph_edges(n_nodes: int, ignore_self=True):
         u.append(i)
         v.append(j)
 
-        return torch.tensor(u).long(), torch.tensor(v).long()
+    return torch.tensor(u).long(), torch.tensor(v).long()
 
 
 def assign_hyperedge_feature(g):
@@ -100,17 +100,29 @@ def smiles_to_hypergraph(smiles,
                          fully_connected_fg: bool = False,
                          num_virtual_nodes=0):
     mol = Chem.MolFromSmiles(smiles)
+
+    if mol.GetNumBonds() == 0:
+        return mol_to_hypergraph_no_bond(mol,
+                                         add_self_loop,
+                                         node_featurizer,
+                                         canonical_atom_order,
+                                         explicit_hydrogens,
+                                         num_virtual_nodes)
+
     g = mol_to_bigraph(mol, add_self_loop, node_featurizer, edge_featurizer,
                        canonical_atom_order, explicit_hydrogens, num_virtual_nodes)
-    if g is None:
-        return None
+    assert g is not None, f'Failed to construct bigraph from SMILES: {smiles}.'
+
+    for nf_field in NODE_ATTRS:
+        g.ndata[nf_field] = g.ndata[nf_field].unsqueeze(1).float()
+
+    for ef_field in EDGE_ATTRS:
+        g.edata[ef_field] = g.edata[ef_field].unsqueeze(1).float()
 
     # g -> hg
     nf = torch.cat([g.ndata[nf_field] for nf_field in NODE_ATTRS], dim=-1)
-    try:
-        ef = torch.cat([g.edata[ef_field] for ef_field in EDGE_ATTRS], dim=-1)
-    except KeyError:  # Ionic bond only case.
-        return None
+    ef = torch.cat([g.edata[ef_field] for ef_field in EDGE_ATTRS], dim=-1)
+
     nx_multi_g = g.to_networkx(node_attrs=NODE_ATTRS, edge_attrs=EDGE_ATTRS).to_undirected()
     nx_g = nx.Graph(nx_multi_g)
 
@@ -134,10 +146,10 @@ def smiles_to_hypergraph(smiles,
         ('atom', 'to', 'func_group'): a2f_edges,
         ('func_group', 'to', 'atom'): f2a_edges,
         ('func_group', 'interacts', 'func_group'): get_complete_graph_edges(num_func_groups)
+    }, {
+        'atom': nf.shape[0],
+        'func_group': num_func_groups
     })
-
-    if len(hyper_g.nodes('atom')) != nf.shape[0]:  # when a certain atom is not connected to the other atoms.
-        return None
 
     hyper_g.nodes['atom'].data['feat'] = nf
     for na in NODE_ATTRS:
@@ -153,5 +165,43 @@ def smiles_to_hypergraph(smiles,
         num_fg = hyper_g.number_of_nodes('func_group')
         node_feat_dim = nf.shape[1]
         hyper_g.nodes['func_group'].data['feat'] = torch.zeros(num_fg, node_feat_dim)
+
+    return hyper_g
+
+
+def mol_to_hypergraph_no_bond(mol,
+                              add_self_loop,
+                              node_featurizer,
+                              canonical_atom_order,
+                              explicit_hydrogens,
+                              num_virtual_nodes):
+    g = mol_to_bigraph(mol, add_self_loop, node_featurizer, None,
+                       canonical_atom_order, explicit_hydrogens, num_virtual_nodes)
+    assert g is not None, f'Failed to construct bigraph from molecule.'
+
+    for nf_field in NODE_ATTRS:
+        g.ndata[nf_field] = g.ndata[nf_field].unsqueeze(1).float()
+
+    nf = torch.cat([g.ndata[nf_field] for nf_field in NODE_ATTRS], dim=-1)
+
+    hyper_g = dgl.heterograph({
+        ('atom', 'interacts', 'atom'): ((), ()),
+        ('atom', 'to', 'func_group'): ((), ()),
+        ('func_group', 'to', 'atom'): ((), ()),
+        ('func_group', 'interacts', 'func_group'): ((), ())
+    }, {
+        'atom': nf.shape[0],
+        'func_group': 0
+    })
+
+    hyper_g.nodes['atom'].data['feat'] = nf
+    for na in NODE_ATTRS:
+        hyper_g.nodes['atom'].data[na] = g.ndata[na]
+
+    hyper_g.edges[('atom', 'interacts', 'atom')].data['feat'] = torch.empty((0, 2), dtype=torch.long)
+
+    num_fg = hyper_g.number_of_nodes('func_group')
+    node_feat_dim = nf.shape[1]
+    hyper_g.nodes['func_group'].data['feat'] = torch.zeros(num_fg, node_feat_dim)
 
     return hyper_g
