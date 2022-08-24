@@ -175,7 +175,7 @@ def seed_everything(run_seed):
 
 if __name__ == '__main__':
     p = argparse.ArgumentParser()
-    p.add_argument('-ds', type=str, required=True)
+    p.add_argument('-ds', type=str, choices=['bbbp', 'tox21', 'toxcast', 'sider', 'clintox', 'muv', 'hiv', 'bace'], required=True)
     p.add_argument('-data_seed', type=int, default=42)
     p.add_argument('-run_seed', type=int, required=True)
     p.add_argument('-init_feat', type=bool, default=True, help='init FG features')
